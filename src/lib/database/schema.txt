@@ -1,0 +1,99 @@
+import { relations } from "drizzle-orm";
+import {
+  boolean,
+  integer,
+  pgTable,
+  primaryKey,
+  real,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
+
+export const UserTable = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 255 }).notNull(),
+    age: integer("age").notNull(),
+    email: varchar("email", { length: 255 }).notNull(),
+  },
+  (table) => {
+    return {
+      emailIndex: uniqueIndex("email").on(table.email),
+      unqiueNameAndAge: unique("uniqueNameAndAge").on(table.name, table.age),
+    };
+  },
+);
+
+// One to One
+export const UserPreferencesTable = pgTable("userPreferences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  emailUpdates: boolean("emailUpdates").notNull().default(false),
+  userId: uuid("userId")
+    .references(() => UserTable.id)
+    .notNull(),
+});
+
+// One to many
+export const PostTable = pgTable("post", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: varchar("title", { length: 255 }).notNull(),
+  averageRating: real("averageRating").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  authorId: uuid("authorId")
+    .references(() => UserTable.id)
+    .notNull(),
+});
+
+// Many to Many (Each post can have multiple categories, and one category can be applied to multiple posts)
+export const CategoryTable = pgTable("category", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 255 }).notNull(),
+});
+
+// Join Table
+// No primary key needed, every entry is unique
+// These 2 can act as composite primary key
+export const PostCategoryTable = pgTable(
+  "postCategory",
+  {
+    postId: uuid("postId").references(() => PostTable.id),
+    categoryId: uuid("categoryId").references(() => CategoryTable.id),
+  },
+  (table) => {
+    return {
+      // composite key
+      pk: primaryKey({ columns: [table.postId, table.categoryId] }),
+    };
+  },
+);
+
+export type InsertUser = typeof UserTable.$inferInsert; // insert type
+export type SelectUser = typeof UserTable.$inferSelect; // return type when queried
+
+// Users with Post (The references above are for the database, we need additonal for drizzle to know in order for it to work in the fornt end)
+
+// RELATIONS (Must do for both sides)
+export const UserTableRelations = relations(UserTable, ({ one, many }) => {
+  return {
+    perferences: one(UserPreferencesTable),
+    posts: many(PostTable),
+  };
+});
+
+// When doing one to one mapping, have pass in 2nd parameter, the FK
+export const UserPreferencesTableRelations = relations(
+  UserPreferencesTable,
+  ({ one }) => {
+    return {
+      users: one(UserTable, {
+        fields: [UserPreferencesTable.userId],
+        references: [UserTable.id],
+      }),
+    };
+  },
+);
